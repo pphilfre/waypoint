@@ -79,6 +79,7 @@ function RootDocument({ children }: { children: ReactNode }) {
         <ConvexProvider client={convex}>
           <AuthKitProvider
             clientId={import.meta.env.VITE_WORKOS_CLIENT_ID ?? ""}
+            devMode
             redirectUri={
               import.meta.env.VITE_WORKOS_REDIRECT_URI ??
               "http://localhost:3000/callback"
