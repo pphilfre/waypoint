@@ -1,118 +1,50 @@
-import { createFileRoute } from '@tanstack/react-router'
-import {
-  Zap,
-  Server,
-  Route as RouteIcon,
-  Shield,
-  Waves,
-  Sparkles,
-} from 'lucide-react'
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useAuth } from "@workos-inc/authkit-react";
+import { useQuery } from "convex/react";
+import { ArrowRight, BriefcaseBusiness, Building2, CalendarClock, CheckCircle2, ChevronRight, FileText, Plus, Sparkles, Target, Users, X } from "lucide-react";
+import { useState } from "react";
+import { api } from "../../convex/_generated/api";
+import { Button } from "@/components/ui/button";
 
-export const Route = createFileRoute('/')({ component: App })
+export const Route = createFileRoute("/")({ component: DashboardPage });
+const PIPELINE=["Interested","Preparing","Applied","Assessment","Interview","Offer"];
 
-function App() {
-  const features = [
-    {
-      icon: <Zap className="w-12 h-12 text-cyan-400" />,
-      title: 'Powerful Server Functions',
-      description:
-        'Write server-side code that seamlessly integrates with your client components. Type-safe, secure, and simple.',
-    },
-    {
-      icon: <Server className="w-12 h-12 text-cyan-400" />,
-      title: 'Flexible Server Side Rendering',
-      description:
-        'Full-document SSR, streaming, and progressive enhancement out of the box. Control exactly what renders where.',
-    },
-    {
-      icon: <RouteIcon className="w-12 h-12 text-cyan-400" />,
-      title: 'API Routes',
-      description:
-        'Build type-safe API endpoints alongside your application. No separate backend needed.',
-    },
-    {
-      icon: <Shield className="w-12 h-12 text-cyan-400" />,
-      title: 'Strongly Typed Everything',
-      description:
-        'End-to-end type safety from server to client. Catch errors before they reach production.',
-    },
-    {
-      icon: <Waves className="w-12 h-12 text-cyan-400" />,
-      title: 'Full Streaming Support',
-      description:
-        'Stream data from server to client progressively. Perfect for AI applications and real-time updates.',
-    },
-    {
-      icon: <Sparkles className="w-12 h-12 text-cyan-400" />,
-      title: 'Next Generation Ready',
-      description:
-        'Built from the ground up for modern web applications. Deploy anywhere JavaScript runs.',
-    },
-  ]
-
-  return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">
-      <section className="relative py-20 px-6 text-center overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/10 via-blue-500/10 to-purple-500/10"></div>
-        <div className="relative max-w-5xl mx-auto">
-          <div className="flex items-center justify-center gap-6 mb-6">
-            <img
-              src="/tanstack-circle-logo.png"
-              alt="TanStack Logo"
-              className="w-24 h-24 md:w-32 md:h-32"
-            />
-            <h1 className="text-6xl md:text-7xl font-black text-white [letter-spacing:-0.08em]">
-              <span className="text-gray-300">TANSTACK</span>{' '}
-              <span className="bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
-                START
-              </span>
-            </h1>
-          </div>
-          <p className="text-2xl md:text-3xl text-gray-300 mb-4 font-light">
-            The framework for next generation AI applications
-          </p>
-          <p className="text-lg text-gray-400 max-w-3xl mx-auto mb-8">
-            Full-stack framework powered by TanStack Router for React and Solid.
-            Build modern applications with server functions, streaming, and type
-            safety.
-          </p>
-          <div className="flex flex-col items-center gap-4">
-            <a
-              href="https://tanstack.com/start"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-8 py-3 bg-cyan-500 hover:bg-cyan-600 text-white font-semibold rounded-lg transition-colors shadow-lg shadow-cyan-500/50"
-            >
-              Documentation
-            </a>
-            <p className="text-gray-400 text-sm mt-2">
-              Begin your TanStack Start journey by editing{' '}
-              <code className="px-2 py-1 bg-slate-700 rounded text-cyan-400">
-                /src/routes/index.tsx
-              </code>
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <section className="py-16 px-6 max-w-7xl mx-auto">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {features.map((feature, index) => (
-            <div
-              key={index}
-              className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-xl p-6 hover:border-cyan-500/50 transition-all duration-300 hover:shadow-lg hover:shadow-cyan-500/10"
-            >
-              <div className="mb-4">{feature.icon}</div>
-              <h3 className="text-xl font-semibold text-white mb-3">
-                {feature.title}
-              </h3>
-              <p className="text-gray-400 leading-relaxed">
-                {feature.description}
-              </p>
-            </div>
-          ))}
-        </div>
-      </section>
+function DashboardPage(){
+  const {user,isLoading}=useAuth(); const uid=user?.id;
+  const companies=useQuery(api.companies.list,uid?{workosUserId:uid}:"skip");
+  const opportunities=useQuery(api.opportunities.list,uid?{workosUserId:uid}:"skip");
+  const applications=useQuery(api.applications.list,uid?{workosUserId:uid}:"skip");
+  const contacts=useQuery(api.contacts.list,uid?{workosUserId:uid}:"skip");
+  const [addOpen,setAddOpen]=useState(false);
+  if(isLoading)return <DashboardSkeleton/>;
+  const firstName=user?.firstName??user?.email?.split("@")[0]??"there"; const hour=new Date().getHours(); const greeting=hour<12?"Good morning":hour<17?"Good afternoon":"Good evening";
+  const deadlines=getDeadlines(opportunities??[],applications??[]); const topCompanies=[...(companies??[])].filter(item=>item.overallScore!==undefined).sort((a,b)=>(b.overallScore??0)-(a.overallScore??0)).slice(0,5); const active=(applications??[]).filter((item:any)=>!["Rejected","Withdrawn"].includes(item.status));
+  return <div className="linear-dashboard">
+    <header className="linear-hero"><div><span className="dashboard-date">{new Intl.DateTimeFormat("en-GB",{weekday:"long",day:"numeric",month:"long"}).format(new Date())}</span><h1>{greeting}, {firstName}</h1><p>Here’s where your search stands right now.</p></div><div className="quick-add-wrap"><Button onClick={()=>setAddOpen(value=>!value)}><Plus size={14}/> Create</Button>{addOpen&&<div className="quick-add-menu"><header><span>Create new</span><button onClick={()=>setAddOpen(false)}><X size={13}/></button></header><QuickLink to="/companies" icon={<Building2 size={14}/>} label="Company" hint="C"/><QuickLink to="/opportunities" icon={<BriefcaseBusiness size={14}/>} label="Opportunity" hint="O"/><QuickLink to="/applications" icon={<FileText size={14}/>} label="Application" hint="A"/><QuickLink to="/contacts" icon={<Users size={14}/>} label="Contact" hint="P"/></div>}</div></header>
+    <section className="dashboard-overview"><div className="overview-title"><span><Sparkles size={13}/> Overview</span><small>Live workspace</small></div><Metric label="Companies" value={companies?.length??0} detail={`${opportunities?.filter((x:any)=>x.isOpen).length??0} open opportunities`}/><Metric label="Applications" value={applications?.length??0} detail={`${active.length} active`}/><Metric label="Interviews" value={applications?.filter((x:any)=>x.status==="Interview").length??0} detail="current stage"/><Metric label="Offers" value={applications?.filter((x:any)=>x.status==="Offer").length??0} detail={`${contacts?.length??0} contacts tracked`}/></section>
+    <div className="dashboard-layout">
+      <main className="dashboard-primary">
+        <Panel title="Upcoming deadlines" eyebrow="Focus" action={<Link to="/deadlines">View all <ArrowRight size={12}/></Link>}>
+          <div className="focus-list">{deadlines.slice(0,5).map((item:any,index)=><Link to={item.source==="Application"?"/applications":"/opportunities"} className="focus-row" key={item.id}><span className={`focus-marker urgency-${urgency(item.date)}`}><i/>{index===0?"Next":urgency(item.date)}</span><div><strong>{item.name}</strong><small>{item.company} · {item.opportunity}</small></div><time><b>{countdown(item.date)}</b><small>{formatDate(item.date)}</small></time><ChevronRight size={14}/></Link>)}{!deadlines.length&&<DashboardEmpty icon={<CalendarClock size={19}/>} title="No deadlines on the horizon" copy="Add a date to an opportunity or application."/>}</div>
+        </Panel>
+        <Panel title="Application pipeline" eyebrow="Progress" action={<Link to="/applications">Open board <ArrowRight size={12}/></Link>}>
+          <div className="linear-pipeline">{PIPELINE.map((status,index)=>{const count=applications?.filter((item:any)=>item.status===status).length??0;return <div key={status}><span><i style={{width:`${Math.max(count?18:0,Math.min(100,count*24))}%`}}/></span><div><small>{status}</small><strong>{count}</strong></div>{index<PIPELINE.length-1&&<ChevronRight size={12}/>}</div>})}</div>
+        </Panel>
+      </main>
+      <aside className="dashboard-secondary">
+        <Panel title="Top companies" eyebrow="Shortlist" action={<Link to="/companies">Browse <ArrowRight size={12}/></Link>}>
+          <div className="shortlist">{topCompanies.map((company:any,index)=><Link to="/companies" key={company._id}><span className="rank-number">{String(index+1).padStart(2,"0")}</span><i className="mini-company-logo">{company.logoUrl?<img src={company.logoUrl} alt=""/>:company.name[0]}</i><strong>{company.name}</strong><b>{company.overallScore}</b></Link>)}{!topCompanies.length&&<DashboardEmpty icon={<Target size={18}/>} title="No ranked companies" copy="Add scores to create a shortlist."/>}</div>
+        </Panel>
+        <Panel title="Workspace health" eyebrow="System"><div className="health-list"><Health label="Companies linked" value={opportunities?.filter((x:any)=>x.company).length??0} total={opportunities?.length??0}/><Health label="Opportunities dated" value={opportunities?.filter((x:any)=>x.deadlines.length).length??0} total={opportunities?.length??0}/><Health label="Applications active" value={active.length} total={applications?.length??0}/></div></Panel>
+      </aside>
     </div>
-  )
+  </div>;
 }
+function Metric({label,value,detail}:{label:string;value:number;detail:string}){return <div className="linear-metric"><span>{label}</span><strong>{value.toString().padStart(2,"0")}</strong><small>{detail}</small></div>}
+function Panel({title,eyebrow,action,children}:{title:string;eyebrow:string;action?:React.ReactNode;children:React.ReactNode}){return <section className="linear-panel"><header><div><span>{eyebrow}</span><h2>{title}</h2></div>{action}</header>{children}</section>}
+function QuickLink({to,icon,label,hint}:{to:string;icon:React.ReactNode;label:string;hint:string}){return <Link to={to} onClick={()=>{}}>{icon}<span>{label}</span><kbd>{hint}</kbd></Link>}
+function DashboardEmpty({icon,title,copy}:{icon:React.ReactNode;title:string;copy:string}){return <div className="dashboard-empty">{icon}<strong>{title}</strong><span>{copy}</span></div>}
+function Health({label,value,total}:{label:string;value:number;total:number}){const pct=total?Math.round(value/total*100):0;return <div><span><CheckCircle2 size={13}/>{label}<b>{pct}%</b></span><i><em style={{width:`${pct}%`}}/></i></div>}
+function getDeadlines(opportunities:any[],applications:any[]){return [...opportunities.flatMap(item=>item.deadlines.map((deadline:any,index:number)=>({id:`o-${item._id}-${index}`,source:"Opportunity",company:item.company?.name??"Unknown",opportunity:item.name,...deadline}))),...applications.flatMap(item=>item.deadlines.map((deadline:any,index:number)=>({id:`a-${item._id}-${index}`,source:"Application",company:item.company?.name??"Unknown",opportunity:item.opportunity?.name??"General application",...deadline})))].filter(item=>item.date>=startToday()).sort((a,b)=>a.date-b.date)}
+function startToday(){const d=new Date();d.setHours(0,0,0,0);return d.getTime()} function days(date:number){return Math.ceil((date-startToday())/86400000)} function countdown(date:number){const value=days(date);return value===0?"Today":value===1?"Tomorrow":`${value} days`} function urgency(date:number){const value=days(date);return value<=3?"urgent":value<=14?"soon":"upcoming"} function formatDate(date:number){return new Intl.DateTimeFormat("en-GB",{day:"numeric",month:"short"}).format(date)}
+function DashboardSkeleton(){return <div className="dashboard-skeleton">{Array.from({length:10}).map((_,i)=><i key={i}/>)}</div>}
