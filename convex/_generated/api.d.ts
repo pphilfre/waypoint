@@ -9,6 +9,7 @@
  */
 
 import type * as applications from "../applications.js";
+import type * as auth from "../auth.js";
 import type * as companies from "../companies.js";
 import type * as contacts from "../contacts.js";
 import type * as crons from "../crons.js";
@@ -17,6 +18,7 @@ import type * as favicon from "../favicon.js";
 import type * as opportunities from "../opportunities.js";
 import type * as ratings from "../ratings.js";
 import type * as savedViews from "../savedViews.js";
+import type * as scoring from "../scoring.js";
 import type * as trash from "../trash.js";
 import type * as url from "../url.js";
 import type * as users from "../users.js";
@@ -29,6 +31,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   applications: typeof applications;
+  auth: typeof auth;
   companies: typeof companies;
   contacts: typeof contacts;
   crons: typeof crons;
@@ -37,6 +40,7 @@ declare const fullApi: ApiFromModules<{
   opportunities: typeof opportunities;
   ratings: typeof ratings;
   savedViews: typeof savedViews;
+  scoring: typeof scoring;
   trash: typeof trash;
   url: typeof url;
   users: typeof users;

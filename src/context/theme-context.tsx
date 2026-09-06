@@ -5,6 +5,9 @@ import React, {
   useState,
   useCallback,
 } from "react";
+import { useAuth } from "@workos-inc/authkit-react";
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
+import { api } from "../../convex/_generated/api";
 
 export type ThemeMode = "light" | "dark" | "system";
 export type ColorScheme = "green" | "indigo" | "mono" | "warm" | "blue";
@@ -82,6 +85,13 @@ export const THEME_INIT_SCRIPT = `(function(){
 })();`;
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  const { isAuthenticated } = useConvexAuth();
+  const profile = useQuery(
+    api.users.getMe,
+    user?.id && isAuthenticated ? { workosUserId: user.id } : "skip",
+  );
+  const updatePreferences = useMutation(api.users.updatePreferences);
   const [mode, setModeState] = useState<ThemeMode>("system");
   const [colorScheme, setColorSchemeState] = useState<ColorScheme>("green");
   const [resolvedMode, setResolvedMode] = useState<"light" | "dark">("light");
@@ -94,6 +104,14 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     if (isColorScheme(storedScheme)) setColorSchemeState(storedScheme);
     setHydrated(true);
   }, []);
+
+  useEffect(() => {
+    if (!profile) return;
+    const savedMode = profile.theme ?? null;
+    const savedScheme = profile.colorScheme ?? null;
+    if (isThemeMode(savedMode)) setModeState(savedMode);
+    if (isColorScheme(savedScheme)) setColorSchemeState(savedScheme);
+  }, [profile]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -115,12 +133,18 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const setMode = useCallback((next: ThemeMode) => {
     setModeState(next);
     localStorage.setItem(STORAGE_THEME, next);
-  }, []);
+    if (user?.id && isAuthenticated) {
+      void updatePreferences({ workosUserId: user.id, theme: next });
+    }
+  }, [isAuthenticated, updatePreferences, user?.id]);
 
   const setColorScheme = useCallback((next: ColorScheme) => {
     setColorSchemeState(next);
     localStorage.setItem(STORAGE_SCHEME, next);
-  }, []);
+    if (user?.id && isAuthenticated) {
+      void updatePreferences({ workosUserId: user.id, colorScheme: next });
+    }
+  }, [isAuthenticated, updatePreferences, user?.id]);
 
   return (
     <ThemeContext.Provider

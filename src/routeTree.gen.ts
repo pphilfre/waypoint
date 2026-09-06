@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as RankingsRouteImport } from './routes/rankings'
 import { Route as OpportunitiesRouteImport } from './routes/opportunities'
 import { Route as DeadlinesRouteImport } from './routes/deadlines'
 import { Route as ContactsRouteImport } from './routes/contacts'
@@ -21,6 +22,11 @@ import { Route as IndexRouteImport } from './routes/index'
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RankingsRoute = RankingsRouteImport.update({
+  id: '/rankings',
+  path: '/rankings',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OpportunitiesRoute = OpportunitiesRouteImport.update({
@@ -67,6 +73,7 @@ export interface FileRoutesByFullPath {
   '/contacts': typeof ContactsRoute
   '/deadlines': typeof DeadlinesRoute
   '/opportunities': typeof OpportunitiesRoute
+  '/rankings': typeof RankingsRoute
   '/settings': typeof SettingsRoute
 }
 export interface FileRoutesByTo {
@@ -77,6 +84,7 @@ export interface FileRoutesByTo {
   '/contacts': typeof ContactsRoute
   '/deadlines': typeof DeadlinesRoute
   '/opportunities': typeof OpportunitiesRoute
+  '/rankings': typeof RankingsRoute
   '/settings': typeof SettingsRoute
 }
 export interface FileRoutesById {
@@ -88,6 +96,7 @@ export interface FileRoutesById {
   '/contacts': typeof ContactsRoute
   '/deadlines': typeof DeadlinesRoute
   '/opportunities': typeof OpportunitiesRoute
+  '/rankings': typeof RankingsRoute
   '/settings': typeof SettingsRoute
 }
 export interface FileRouteTypes {
@@ -100,6 +109,7 @@ export interface FileRouteTypes {
     | '/contacts'
     | '/deadlines'
     | '/opportunities'
+    | '/rankings'
     | '/settings'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -110,6 +120,7 @@ export interface FileRouteTypes {
     | '/contacts'
     | '/deadlines'
     | '/opportunities'
+    | '/rankings'
     | '/settings'
   id:
     | '__root__'
@@ -120,6 +131,7 @@ export interface FileRouteTypes {
     | '/contacts'
     | '/deadlines'
     | '/opportunities'
+    | '/rankings'
     | '/settings'
   fileRoutesById: FileRoutesById
 }
@@ -131,6 +143,7 @@ export interface RootRouteChildren {
   ContactsRoute: typeof ContactsRoute
   DeadlinesRoute: typeof DeadlinesRoute
   OpportunitiesRoute: typeof OpportunitiesRoute
+  RankingsRoute: typeof RankingsRoute
   SettingsRoute: typeof SettingsRoute
 }
 
@@ -141,6 +154,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/rankings': {
+      id: '/rankings'
+      path: '/rankings'
+      fullPath: '/rankings'
+      preLoaderRoute: typeof RankingsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/opportunities': {
@@ -203,6 +223,7 @@ const rootRouteChildren: RootRouteChildren = {
   ContactsRoute: ContactsRoute,
   DeadlinesRoute: DeadlinesRoute,
   OpportunitiesRoute: OpportunitiesRoute,
+  RankingsRoute: RankingsRoute,
   SettingsRoute: SettingsRoute,
 }
 export const routeTree = rootRouteImport

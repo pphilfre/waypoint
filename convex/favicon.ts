@@ -3,7 +3,8 @@
 import { v } from "convex/values";
 import { action } from "./_generated/server";
 import { internal } from "./_generated/api";
-import { hostnameFromUrl } from "./url";
+import { assertPublicHostname, hostnameFromUrl } from "./url";
+import { requireUserId } from "./auth";
 
 async function fetchAsBlob(url: string): Promise<Blob | null> {
   try {
@@ -31,7 +32,9 @@ export const fetchForCompany = action({
     websiteUrl: v.string(),
   },
   handler: async (ctx, args) => {
+    await requireUserId(ctx, args.workosUserId);
     const host = hostnameFromUrl(args.websiteUrl);
+    assertPublicHostname(host);
     const origin = new URL(args.websiteUrl).origin;
 
     const candidates = [

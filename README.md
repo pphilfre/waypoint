@@ -1,5 +1,12 @@
-<<<<<<< HEAD
-Waypoint
-=======
 # Waypoint
->>>>>>> 613f89e36fc4f6821a84a277a29f2fdc3848f8c4
+
+A private, responsive careers opportunity and application tracker built with React, TanStack Start, Convex and WorkOS AuthKit.
+
+## Development
+
+```bash
+pnpm install
+pnpm dev
+```
+
+Run `pnpm test` for unit tests and `pnpm build` for a production bundle.

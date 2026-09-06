@@ -29,6 +29,7 @@ export default defineSchema({
     notes: v.optional(v.string()),
     overallScore: v.optional(v.number()),
     customFields: v.optional(v.any()),
+    archived: v.optional(v.boolean()),
     trashed: v.boolean(),
     updatedAt: v.number(),
   })
@@ -58,6 +59,9 @@ export default defineSchema({
     status: v.string(),
     notes: v.optional(v.string()),
     overallScore: v.optional(v.number()),
+    customFields: v.optional(v.any()),
+    checkAgainAt: v.optional(v.number()),
+    archived: v.optional(v.boolean()),
     isOpen: v.boolean(),
     trashed: v.boolean(),
     updatedAt: v.number(),
@@ -83,6 +87,13 @@ export default defineSchema({
     notes: v.optional(v.string()),
     deadlines: v.array(v.object({ name: v.string(), date: v.number() })),
     links: v.array(v.object({ name: v.string(), url: v.string() })),
+    customFields: v.optional(v.any()),
+    nextAction: v.optional(v.string()),
+    nextActionDue: v.optional(v.number()),
+    checklist: v.optional(v.array(v.object({ label: v.string(), done: v.boolean() }))),
+    documentRefs: v.optional(v.array(v.object({ name: v.string(), url: v.optional(v.string()) }))),
+    stageHistory: v.optional(v.array(v.object({ status: v.string(), changedAt: v.number() }))),
+    archived: v.optional(v.boolean()),
     trashed: v.boolean(),
     updatedAt: v.number(),
   })
@@ -135,7 +146,7 @@ export default defineSchema({
 
   savedViews: defineTable({
     workosUserId: v.string(),
-    entityType: v.union(v.literal("companies"), v.literal("opportunities")),
+    entityType: v.union(v.literal("companies"), v.literal("opportunities"), v.literal("applications"), v.literal("contacts")),
     name: v.string(),
     filters: v.any(),
     sorting: v.any(),

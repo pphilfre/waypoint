@@ -1,0 +1,17 @@
+diff --git a/dist/_chunks/info.mjs b/dist/_chunks/info.mjs
+index b32194de970ac9f96159b41dfaef87cb5aeaf214..1893e501e7bf446db398643a245d451c16a57ee4 100644
+--- a/dist/_chunks/info.mjs
++++ b/dist/_chunks/info.mjs
+@@ -11150,7 +11150,11 @@ async function writeBuildInfo(nitro) {
+   await mkdir(dirname(lastBuild), { recursive: true });
+   await unlink(lastBuild).catch(() => {
+   });
+-  await symlink(nitro.options.output.dir, lastBuild).catch(console.warn);
++  await symlink(
++    nitro.options.output.dir,
++    lastBuild,
++    process.platform === "win32" ? "junction" : void 0
++  ).catch(console.warn);
+   return buildInfo;
+ }
+ 

@@ -1,4 +1,5 @@
 import * as Dialog from "@radix-ui/react-dialog";
+import { Link } from "@tanstack/react-router";
 import { useAuth } from "@workos-inc/authkit-react";
 import {
   getFilteredRowModel,
@@ -12,6 +13,7 @@ import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
+  Archive,
   Building2,
   Briefcase,
   Check,
@@ -35,6 +37,10 @@ import {
   ChevronLeft,
   Trash2,
   X,
+  GraduationCap,
+  Lightbulb,
+  FlaskConical,
+  GitMerge,
 } from "lucide-react";
 import {
   useCallback,
@@ -52,6 +58,7 @@ import {
 import { api } from "../../../convex/_generated/api";
 import type { Doc, Id } from "../../../convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
+import { useOpenFromQuery, useRecordSelection } from "@/hooks/use-open-from-query";
 import { cn } from "@/lib/utils";
 
 type Company = Doc<"companies"> & { logoUrl: string | null };
@@ -61,12 +68,14 @@ type CompanyPatch = {
   notes?: string;
   overallScore?: number | null;
   customFields?: Record<string, unknown>;
+  archived?: boolean;
 };
 
 const CORE_COLUMN_LABELS: Record<string, string> = {
   name: "Company",
   opportunities: "Opportunities",
   contacts: "Contacts",
+  applications: "Applications",
   overallScore: "Score",
   updatedAt: "Updated",
 };
@@ -84,6 +93,7 @@ export function CompanyWorkspace() {
     workosUserId ? { workosUserId } : "skip",
   );
   const contacts = useQuery(api.contacts.list, workosUserId ? { workosUserId } : "skip");
+  const applications = useQuery(api.applications.list, workosUserId ? { workosUserId } : "skip");
   const ratingCriteria = useQuery(api.ratings.listCriteria, workosUserId ? { workosUserId } : "skip");
   const savedViews = useQuery(api.savedViews.list, workosUserId ? { workosUserId, entityType: "companies" } : "skip");
   const createCompany = useMutation(api.companies.create);
@@ -93,8 +103,9 @@ export function CompanyWorkspace() {
   const saveView = useMutation(api.savedViews.save);
   const removeView = useMutation(api.savedViews.remove);
   const renameCustomField = useMutation(api.companies.renameCustomField);
-  const [selectedId, setSelectedId] = useState<Id<"companies"> | null>(null);
-  const [addOpen, setAddOpen] = useState(false);
+  const mergeCompanies = useMutation(api.companies.merge);
+  const [selectedId, setSelectedId] = useRecordSelection<Id<"companies">>();
+  const [addOpen, setAddOpen] = useOpenFromQuery();
   const [search, setSearch] = useState("");
   const [sorting, setSorting] = useState<SortingState>([]);
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
@@ -103,7 +114,8 @@ export function CompanyWorkspace() {
   const [viewPanel, setViewPanel] = useState<"filters" | "columns" | "views" | null>(null);
   const [minScore, setMinScore] = useState(0);
   const [relationshipFilter, setRelationshipFilter] = useState("all");
-  const [visibleColumns, setVisibleColumns] = useState(["name","opportunities","contacts","overallScore","updatedAt"]);
+  const [showArchived, setShowArchived] = useState(false);
+  const [visibleColumns, setVisibleColumns] = useState(["name","opportunities","contacts","applications","overallScore","updatedAt"]);
   const [columnOrder, setColumnOrder] = useState(CORE_COLUMN_ORDER);
 
   const customFieldKeys = useMemo(() => [...new Set((companies ?? []).flatMap(company => Object.keys((company.customFields as Record<string, unknown> | undefined) ?? {})))].sort(), [companies]);
@@ -126,10 +138,14 @@ export function CompanyWorkspace() {
   const relationshipCounts = useMemo(() => {
     const opportunity = new Map<string, number>();
     const contact = new Map<string, number>();
+    const application = new Map<string, number>();
+    const opportunityItems = new Map<string, any[]>();
     for (const item of opportunities ?? []) opportunity.set(item.companyId, (opportunity.get(item.companyId) ?? 0) + 1);
     for (const item of contacts ?? []) contact.set(item.companyId, (contact.get(item.companyId) ?? 0) + 1);
-    return { opportunity, contact };
-  }, [contacts, opportunities]);
+    for (const item of opportunities ?? []) opportunityItems.set(item.companyId, [...(opportunityItems.get(item.companyId) ?? []), item]);
+    for (const item of applications ?? []) application.set(item.companyId, (application.get(item.companyId) ?? 0) + 1);
+    return { opportunity, contact, application, opportunityItems };
+  }, [applications, contacts, opportunities]);
 
   const data = useMemo(
     () =>
@@ -146,12 +162,22 @@ export function CompanyWorkspace() {
       }),
     [companies, pending],
   );
+  const duplicateIds = useMemo(() => {
+    const identities = new Map<string, string[]>();
+    for (const company of data) {
+      const keys = [`name:${company.name.trim().toLowerCase().replace(/\s+/g, " ")}`];
+      try { keys.push(`host:${new URL(company.websiteUrl).hostname.replace(/^www\./, "").toLowerCase()}`); } catch { /* Invalid URLs are handled by the editor/import validation. */ }
+      for (const key of keys) identities.set(key, [...(identities.get(key) ?? []), company._id]);
+    }
+    return new Set([...identities.values()].filter(ids => ids.length > 1).flat());
+  }, [data]);
   const filteredData = useMemo(() => data.filter(company => {
+    if (!showArchived && company.archived) return false;
     if ((company.overallScore ?? 0) < minScore) return false;
     const opportunityCount=relationshipCounts.opportunity.get(company._id) ?? 0;
     const contactCount=relationshipCounts.contact.get(company._id) ?? 0;
-    return relationshipFilter==="opportunities"?opportunityCount>0:relationshipFilter==="contacts"?contactCount>0:relationshipFilter==="unlinked"?opportunityCount===0&&contactCount===0:true;
-  }),[data,minScore,relationshipFilter,relationshipCounts]);
+    return relationshipFilter==="opportunities"?opportunityCount>0:relationshipFilter==="contacts"?contactCount>0:relationshipFilter==="unlinked"?opportunityCount===0&&contactCount===0:relationshipFilter==="duplicates"?duplicateIds.has(company._id):true;
+  }),[data,duplicateIds,minScore,relationshipFilter,relationshipCounts,showArchived]);
   const deferredSearch = useDeferredValue(search);
 
   const showNotice = useCallback((message: string) => {
@@ -221,7 +247,9 @@ export function CompanyWorkspace() {
 
   const selectedCompany = data.find((company) => company._id === selectedId) ?? null;
   const exportSelected = () => { const rows=data.filter(item=>checkedIds.has(item._id)); const csv=["id,name,websiteUrl,overallScore",...rows.map(item=>[item._id,item.name,item.websiteUrl,item.overallScore??""].map(value=>`"${String(value).replaceAll('"','""')}"`).join(","))].join("\n"); const url=URL.createObjectURL(new Blob([csv],{type:"text/csv"})); const anchor=document.createElement("a");anchor.href=url;anchor.download="waypoint-companies-selected.csv";anchor.click();URL.revokeObjectURL(url); };
-  const storeView = async () => { if(!workosUserId)return; const name=window.prompt("Name this view"); if(!name)return; await saveView({workosUserId,entityType:"companies",name,filters:{search,minScore,relationshipFilter},sorting,visibleColumns,columnOrder}); showNotice("View saved"); };
+  const storeView = async () => { if(!workosUserId)return; const name=window.prompt("Name this view"); if(!name)return; await saveView({workosUserId,entityType:"companies",name,filters:{search,minScore,relationshipFilter,showArchived},sorting,visibleColumns,columnOrder}); showNotice("View saved"); };
+  const addCustomColumn = async () => { const name=window.prompt("New custom column name")?.trim(); if(!name||!workosUserId)return;if(customFieldKeys.some(key=>key.toLowerCase()===name.toLowerCase())){showNotice("That column already exists");return;}await Promise.all(data.map(company=>update(company._id,{customFields:{...((company.customFields as Record<string,unknown>|undefined)??{}),[name]:""}})));showNotice(`Added ${name}`); };
+  const mergeSelected = async () => { if(!workosUserId||checkedIds.size!==2)return;const [targetCompanyId,sourceCompanyId]=[...checkedIds] as Id<"companies">[];const target=data.find(item=>item._id===targetCompanyId);const source=data.find(item=>item._id===sourceCompanyId);if(!window.confirm(`Merge “${source?.name}” into “${target?.name}”? Relationships will move to the first selected company.`))return;await mergeCompanies({workosUserId,targetCompanyId,sourceCompanyId});setCheckedIds(new Set());showNotice("Companies merged"); };
   const moveColumn = useCallback((sourceId: string, targetId: string) => setColumnOrder(current => {
     const sourceIndex = current.indexOf(sourceId); const targetIndex = current.indexOf(targetId);
     if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) return current;
@@ -243,12 +271,19 @@ export function CompanyWorkspace() {
       <section className="workspace-heading">
         <div>
           <h1>Companies</h1>
+          <p>Your research library. Compare, connect, and find your fit.</p>
         </div>
         <Button onClick={() => setAddOpen(true)} className="add-company-button">
           <Plus size={15} strokeWidth={2.3} /> Add company
         </Button>
       </section>
 
+      <div className="view-tabs" aria-label="Company views">
+        <button className={relationshipFilter==="all"&&minScore===0?"active":""} onClick={()=>{setRelationshipFilter("all");setMinScore(0)}}>All companies <span>{data.filter(item=>!item.archived).length}</span></button>
+        <button className={minScore===70?"active":""} onClick={()=>{setMinScore(70);setRelationshipFilter("all");setSorting([{id:"overallScore",desc:true}])}}>Top rated</button>
+        <button className={relationshipFilter==="opportunities"?"active":""} onClick={()=>{setRelationshipFilter("opportunities");setMinScore(0)}}>With opportunities</button>
+        <button className={relationshipFilter==="unlinked"?"active":""} onClick={()=>{setRelationshipFilter("unlinked");setMinScore(0)}}>To explore</button>
+      </div>
       <section className="records-shell">
         <div className="table-toolbar">
           <label className="table-search">
@@ -273,11 +308,11 @@ export function CompanyWorkspace() {
           </div>
         </div>
         {viewPanel&&<div className="table-config-panel">
-          {viewPanel==="filters"&&<><header><strong>Filter companies</strong><button onClick={()=>{setMinScore(0);setRelationshipFilter("all")}}>Clear all</button></header><div className="filter-grid"><label><span>Minimum score <b>{minScore}</b></span><input type="range" min="0" max="100" step="5" value={minScore} onChange={event=>setMinScore(Number(event.target.value))}/></label><label><span>Relationships</span><select value={relationshipFilter} onChange={event=>setRelationshipFilter(event.target.value)}><option value="all">Any</option><option value="opportunities">Has opportunities</option><option value="contacts">Has contacts</option><option value="unlinked">No linked records</option></select></label></div></>}
-          {viewPanel==="columns"&&<><header><strong>Columns</strong><span>{visibleColumns.length} shown · drag to reorder</span></header><ColumnManager order={columnOrder} visibleColumns={visibleColumns} customFieldKeys={customFieldKeys} onVisibilityChange={setVisibleColumns} onMove={moveColumn} onRename={renameColumn}/></>}
-          {viewPanel==="views"&&<><header><strong>Saved views</strong><button onClick={()=>void storeView()}>+ Save current</button></header><div className="saved-view-list">{savedViews?.map((view:any)=><div key={view._id}><button onClick={()=>{setSearch(view.filters?.search??"");setMinScore(view.filters?.minScore??0);setRelationshipFilter(view.filters?.relationshipFilter??"all");setSorting(view.sorting??[]);setVisibleColumns(view.visibleColumns??visibleColumns);setColumnOrder(view.columnOrder??columnOrder);setViewPanel(null)}}><Bookmark size={13}/><span>{view.name}</span></button><button aria-label={`Delete ${view.name}`} onClick={()=>workosUserId&&void removeView({workosUserId,viewId:view._id})}><X size={12}/></button></div>)}{savedViews?.length===0&&<p>Save a filter, sort, and column layout for instant reuse.</p>}</div></>}
+          {viewPanel==="filters"&&<><header><strong>Filter companies</strong><button onClick={()=>{setMinScore(0);setRelationshipFilter("all");setShowArchived(false)}}>Clear all</button></header><div className="filter-grid"><label><span>Minimum score <b>{minScore}</b></span><input type="range" min="0" max="100" step="5" value={minScore} onChange={event=>setMinScore(Number(event.target.value))}/></label><label><span>Relationships</span><select value={relationshipFilter} onChange={event=>setRelationshipFilter(event.target.value)}><option value="all">Any</option><option value="opportunities">Has opportunities</option><option value="contacts">Has contacts</option><option value="unlinked">No linked records</option><option value="duplicates">Potential duplicates ({duplicateIds.size})</option></select></label><label className="filter-check"><input type="checkbox" checked={showArchived} onChange={event=>setShowArchived(event.target.checked)}/> Include archived</label></div></>}
+          {viewPanel==="columns"&&<><header><strong>Columns</strong><button onClick={()=>void addCustomColumn()}>+ Add custom column</button></header><ColumnManager order={columnOrder} visibleColumns={visibleColumns} customFieldKeys={customFieldKeys} onVisibilityChange={setVisibleColumns} onMove={moveColumn} onRename={renameColumn}/></>}
+          {viewPanel==="views"&&<><header><strong>Saved views</strong><button onClick={()=>void storeView()}>+ Save current</button></header><div className="saved-view-list">{savedViews?.map((view:any)=><div key={view._id}><button onClick={()=>{setSearch(view.filters?.search??"");setMinScore(view.filters?.minScore??0);setRelationshipFilter(view.filters?.relationshipFilter??"all");setShowArchived(view.filters?.showArchived??false);setSorting(view.sorting??[]);setVisibleColumns(view.visibleColumns??visibleColumns);setColumnOrder(view.columnOrder??columnOrder);setViewPanel(null)}}><Bookmark size={13}/><span>{view.name}</span></button><button aria-label={`Delete ${view.name}`} onClick={()=>workosUserId&&void removeView({workosUserId,viewId:view._id})}><X size={12}/></button></div>)}{savedViews?.length===0&&<p>Save a filter, sort, and column layout for instant reuse.</p>}</div></>}
         </div>}
-        {checkedIds.size>0&&<div className="bulk-toolbar"><span><Check size={13}/>{checkedIds.size} selected</span><button onClick={exportSelected}><Download size={13}/> Export CSV</button><button className="danger" onClick={()=>{if(!workosUserId)return;void trashCompanies({workosUserId,companyIds:[...checkedIds] as Id<"companies">[]}).then(()=>{setCheckedIds(new Set());showNotice("Companies moved to trash")})}}><Trash2 size={13}/> Move to trash</button><button onClick={()=>setCheckedIds(new Set())}><X size={13}/></button></div>}
+        {checkedIds.size>0&&<div className="bulk-toolbar"><span><Check size={13}/>{checkedIds.size} selected</span>{checkedIds.size===2&&<button onClick={()=>void mergeSelected()}><GitMerge size={13}/> Merge</button>}<button onClick={exportSelected}><Download size={13}/> Export CSV</button><button onClick={()=>void Promise.all([...checkedIds].map(id=>update(id as Id<"companies">,{archived:true}))).then(()=>{setCheckedIds(new Set());showNotice("Companies archived")})}><Archive size={13}/> Archive</button><button className="danger" onClick={()=>{if(!workosUserId)return;void trashCompanies({workosUserId,companyIds:[...checkedIds] as Id<"companies">[]}).then(()=>{setCheckedIds(new Set());showNotice("Companies moved to trash")})}}><Trash2 size={13}/> Move to trash</button><button onClick={()=>setCheckedIds(new Set())}><X size={13}/></button></div>}
 
         {companies === undefined ? (
           <CompanyTableSkeleton />
@@ -306,6 +341,7 @@ export function CompanyWorkspace() {
         company={selectedCompany}
         opportunities={(opportunities ?? []).filter((item) => item.companyId === selectedCompany?._id)}
         contacts={(contacts ?? []).filter((item) => item.companyId === selectedCompany?._id)}
+        applications={(applications ?? []).filter((item) => item.companyId === selectedCompany?._id)}
         criteria={(ratingCriteria ?? []).filter((item) => item.entityType === "company")}
         open={selectedCompany !== null}
         onOpenChange={(open) => !open && setSelectedId(null)}
@@ -344,7 +380,7 @@ function CompanyTable({
   onCheckedIdsChange: Dispatch<SetStateAction<Set<string>>>;
   visibleColumns: string[];
   customFieldKeys: string[];
-  relationshipCounts: { opportunity: Map<string, number>; contact: Map<string, number> };
+  relationshipCounts: { opportunity: Map<string, number>; contact: Map<string, number>; application: Map<string, number>; opportunityItems: Map<string, any[]> };
   columnOrder: string[];
 }) {
   const columns = useMemo<LegacyColumnDef<Company>[]>(
@@ -392,11 +428,7 @@ function CompanyTable({
           <div className="company-cell">
             <CompanyAvatar company={row.original} />
             <div className="company-name-stack">
-              <InlineValue
-                value={row.original.name}
-                ariaLabel="Edit company name"
-                onSave={(name) => onUpdate(row.original._id, { name })}
-              />
+              <button className="company-open-name" onClick={()=>onOpen(row.original._id)}>{row.original.name}</button>
               <span>{hostname(row.original.websiteUrl)}</span>
             </div>
           </div>
@@ -406,15 +438,21 @@ function CompanyTable({
         id: "opportunities",
         header: "Opportunities",
         enableSorting: false,
-        cell: ({row}) => <span className="contact-count"><Briefcase size={14}/>{relationshipCounts.opportunity.get(row.original._id) ?? 0}</span>,
+        cell: ({row}) => <OpportunityIndicators items={relationshipCounts.opportunityItems.get(row.original._id)??[]} onOpen={()=>onOpen(row.original._id)}/>,
       },
       {
         id: "contacts",
         header: "Contacts",
         enableSorting: false,
         cell: ({ row }) => (
-          <span className="contact-count"><Users size={14} /> {relationshipCounts.contact.get(row.original._id) ?? 0}</span>
+          <button className="contact-count interactive-count" onClick={()=>onOpen(row.original._id)}><Users size={14} /> {relationshipCounts.contact.get(row.original._id) ?? 0}</button>
         ),
+      },
+      {
+        id: "applications",
+        header: "Applications",
+        enableSorting: false,
+        cell: ({row}) => <span className="contact-count"><Briefcase size={14}/>{relationshipCounts.application.get(row.original._id)??0}</span>,
       },
       {
         accessorKey: "overallScore",
@@ -465,7 +503,7 @@ function CompanyTable({
   const table = useLegacyTable({
     data,
     columns,
-    state: { sorting, globalFilter: search, columnOrder: ["select", ...columnOrder, "open"], columnVisibility: Object.fromEntries(["name","opportunities","contacts","overallScore","updatedAt",...customFieldKeys.map(key=>`custom:${key}`)].map(id=>[id,visibleColumns.includes(id)])) },
+    state: { sorting, globalFilter: search, columnOrder: ["select", ...columnOrder, "open"], columnVisibility: Object.fromEntries(["name","opportunities","contacts","applications","overallScore","updatedAt",...customFieldKeys.map(key=>`custom:${key}`)].map(id=>[id,visibleColumns.includes(id)])) },
     onSortingChange,
     getFilteredRowModel: getFilteredRowModel(),
     getSortedRowModel: getSortedRowModel(),
@@ -694,6 +732,12 @@ function InlineCustomValue({ label, value, onSave }: { label: string; value: unk
   return <input className="inline-input" value={draft} onChange={event => setDraft(event.target.value)} onBlur={save} onKeyDown={event => { if (event.key === "Enter") event.currentTarget.blur(); if (event.key === "Escape") setEditing(false); }} autoFocus aria-label={`Edit ${label}`}/>;
 }
 
+function OpportunityIndicators({items,onOpen}:{items:any[];onOpen:()=>void}) {
+  const groups=[...new Map(items.map(item=>[item.type,item])).entries()];
+  if(!groups.length)return <span className="muted-cell">None</span>;
+  return <span className="company-type-indicators">{groups.slice(0,5).map(([type,item])=>{const Icon=type.includes("Degree")?GraduationCap:type.includes("Internship")?Briefcase:type.includes("Experience")?Building2:type.includes("Insight")?Lightbulb:type.includes("STEM")?FlaskConical:Briefcase;const href=item.links?.find((link:any)=>link.type==="Application")?.url??item.links?.[0]?.url;return href?<a key={type} href={href} target="_blank" rel="noreferrer" title={`${type} · open link`} onClick={event=>event.stopPropagation()}><Icon size={13}/></a>:<button key={type} title={`${type} · open company`} onClick={onOpen}><Icon size={13}/></button>})}{items.length>groups.length&&<button onClick={onOpen}>+{items.length-groups.length}</button>}</span>;
+}
+
 function CompanyAvatar({ company, large = false }: { company: Company; large?: boolean }) {
   const [failed, setFailed] = useState(false);
   return (
@@ -730,14 +774,13 @@ function AddCompanyDialog({ open, onOpenChange, onCreate }: { open: boolean; onO
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="dialog-overlay" />
-        <Dialog.Content className="add-dialog">
-          <div className="dialog-kicker"><Building2 size={14} /> New record</div>
-          <Dialog.Title>Add a company</Dialog.Title>
-          <Dialog.Description>Start with the essentials. Waypoint will look for a favicon automatically.</Dialog.Description>
+        <Dialog.Content className="add-dialog record-dialog">
+          <Dialog.Title>Add company</Dialog.Title>
+          <Dialog.Description>Save a company to start collecting opportunities, people, and research.</Dialog.Description>
           <form onSubmit={submit}>
             <label>Company name<input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Cisco" autoFocus /></label>
             <label>Website<input value={websiteUrl} onChange={(e) => setWebsiteUrl(e.target.value)} placeholder="cisco.com" inputMode="url" /></label>
-            {error && <p className="form-error">{error}</p>}
+            {error && <p className="form-error" role="alert">{error}</p>}
             <div className="dialog-actions">
               <Dialog.Close asChild><Button type="button" variant="ghost">Cancel</Button></Dialog.Close>
               <Button type="submit" disabled={saving}>{saving && <LoaderCircle className="spin" size={14} />}{saving ? "Adding…" : "Add company"}</Button>
@@ -750,10 +793,11 @@ function AddCompanyDialog({ open, onOpenChange, onCreate }: { open: boolean; onO
   );
 }
 
-function CompanySheet({ company, opportunities, contacts, criteria, open, onOpenChange, onUpdate, workosUserId, onNotice }: {
+function CompanySheet({ company, opportunities, contacts, applications, criteria, open, onOpenChange, onUpdate, workosUserId, onNotice }: {
   company: Company | null;
   opportunities: Array<Doc<"opportunities"> & { company: Doc<"companies"> | null }>;
   contacts: any[];
+  applications: any[];
   criteria: any[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -793,7 +837,7 @@ function CompanySheet({ company, opportunities, contacts, criteria, open, onOpen
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="dialog-overlay" />
-        <Dialog.Content className="company-sheet" onOpenAutoFocus={(event) => event.preventDefault()}>
+        <Dialog.Content className="company-sheet">
           <Dialog.Title className="sr-only">{company.name}</Dialog.Title>
           <Dialog.Description className="sr-only">Company details and editing</Dialog.Description>
           <div className="sheet-header">
@@ -806,7 +850,7 @@ function CompanySheet({ company, opportunities, contacts, criteria, open, onOpen
           </div>
 
           <div className="sheet-score-strip">
-            <div><span>Overall score</span><InlineScore value={company.overallScore} onSave={(overallScore) => void onUpdate(company._id, { overallScore })} /></div>
+            <div><span>Overall score</span>{criteria.length?<strong>{company.overallScore??0}</strong>:<InlineScore value={company.overallScore} onSave={(overallScore) => void onUpdate(company._id, { overallScore })} />}</div>
             <div><span>Opportunities</span><strong>{opportunities.length}</strong></div>
             <div><span>Contacts</span><strong>{contacts.length}</strong></div>
           </div>
@@ -821,20 +865,24 @@ function CompanySheet({ company, opportunities, contacts, criteria, open, onOpen
               </div>
             </SheetSection>
 
-            <SheetSection title="Opportunities">
-              {opportunities.length ? <div className="company-opportunity-list">{opportunities.map(item => <div key={item._id}><span><strong>{item.name}</strong><small>{item.type} · {item.locations[0]?.city || "Location unspecified"}</small></span><em>{item.isOpen ? item.status : "Closed"}</em></div>)}</div> : <div className="sheet-empty"><MoreHorizontal size={17} /><div><strong>No opportunities yet</strong><span>This company can still be tracked on its own.</span></div></div>}
+            <SheetSection title="Opportunities" action={<Link to="/opportunities" search={{new: 1} as never}>+ Add</Link>}>
+              {opportunities.length ? <div className="company-opportunity-list">{opportunities.map(item => <div key={item._id}><span><strong><Link to="/opportunities" search={{record:item._id} as never}>{item.name}</Link></strong><small>{item.type} · {item.locations[0]?.city || "Location unspecified"}</small></span><em>{item.isOpen ? item.status : "Closed"}</em></div>)}</div> : <div className="sheet-empty"><MoreHorizontal size={17} /><div><strong>No opportunities yet</strong><span>This company can still be tracked on its own.</span></div></div>}
             </SheetSection>
 
             <SheetSection title="Opportunity types">
               {opportunities.length ? <div className="company-type-cloud">{[...new Set(opportunities.map(item => item.type))].map(type => <span key={type}><i />{type}</span>)}</div> : <div className="sheet-inline-empty">No opportunity types recorded.</div>}
             </SheetSection>
 
-            <SheetSection title="Contacts" action={contacts.length ? <span className="phase-tag">{contacts.length}</span> : undefined}>
-              {contacts.length ? <div className="company-contact-list">{contacts.map(contact=><div key={contact._id}><span className="contact-mini-avatar">{contact.name.slice(0,1)}</span><span><strong>{contact.name}</strong><small>{contact.role||"Role not added"}</small></span>{contact.linkedinUrl&&<a href={contact.linkedinUrl} target="_blank" rel="noreferrer" aria-label={`Open ${contact.name} on LinkedIn`}><ExternalLink size={12}/></a>}</div>)}</div> : <div className="sheet-inline-empty">No contacts linked to this company.</div>}
+            <SheetSection title="Applications" action={<Link to="/applications">View applications</Link>}>
+              {applications.length?<div className="company-opportunity-list">{applications.map(item=><div key={item._id}><span><strong><Link to="/applications" search={{record:item._id} as never}>{item.opportunity?.name??"General application"}</Link></strong><small>{item.nextAction??"No next action"}</small></span><em>{item.status}</em></div>)}</div>:<div className="sheet-inline-empty">No applications linked to this company.</div>}
+            </SheetSection>
+
+            <SheetSection title="Contacts" action={<Link to="/contacts" search={{new: 1} as never}>+ Add</Link>}>
+              {contacts.length ? <div className="company-contact-list">{contacts.map(contact=><div key={contact._id}><span className="contact-mini-avatar">{contact.name.slice(0,1)}</span><span><strong><Link to="/contacts" search={{record:contact._id} as never}>{contact.name}</Link></strong><small>{contact.role||"Role not added"}</small></span>{contact.linkedinUrl&&<a href={contact.linkedinUrl} target="_blank" rel="noreferrer" aria-label={`Open ${contact.name} on LinkedIn`}><ExternalLink size={12}/></a>}</div>)}</div> : <div className="sheet-inline-empty">No contacts linked to this company.</div>}
             </SheetSection>
 
             <SheetSection title="Ratings" action={criteria.length ? <span className="rating-overall"><Scale size={11}/>{company.overallScore ?? "—"}/100</span> : undefined}>
-              {criteria.length ? <div className="company-ratings">{criteria.sort((a,b)=>a.order-b.order).map(criterion=>{const value=ratingValues?.find(item=>item.criterionId===criterion._id)?.score;return <label key={criterion._id}><span><strong>{criterion.name}</strong><small>Weight {criterion.weight}%</small></span><div><input type="range" min="0" max={criterion.maxScore} defaultValue={value??0} onPointerUp={event=>workosUserId&&void setRatingValue({workosUserId,criterionId:criterion._id,entityType:"company",entityId:company._id,score:Number(event.currentTarget.value)})}/><output>{value??0}</output></div></label>})}</div> : <div className="sheet-inline-empty">Create company rating criteria in Settings to start a weighted scorecard.</div>}
+              {criteria.length ? <div className="company-ratings">{criteria.sort((a,b)=>a.order-b.order).map(criterion=>{const value=ratingValues?.find(item=>item.criterionId===criterion._id)?.score;return <label key={criterion._id}><span><strong>{criterion.name}</strong><small>Weight {criterion.weight}%</small></span><div><input type="range" min="0" max={criterion.maxScore} defaultValue={value??0} onPointerUp={event=>workosUserId&&void setRatingValue({workosUserId,criterionId:criterion._id,entityType:"company",entityId:company._id,score:Number(event.currentTarget.value)})} onKeyUp={event=>["ArrowLeft","ArrowRight","ArrowUp","ArrowDown","Home","End","PageUp","PageDown"].includes(event.key)&&workosUserId&&void setRatingValue({workosUserId,criterionId:criterion._id,entityType:"company",entityId:company._id,score:Number(event.currentTarget.value)})}/><output>{value??0}</output></div></label>})}</div> : <div className="sheet-inline-empty">Create company rating criteria in Settings to start a weighted scorecard.</div>}
             </SheetSection>
 
             <SheetSection title="Notes">
@@ -847,6 +895,7 @@ function CompanySheet({ company, opportunities, contacts, criteria, open, onOpen
                 placeholder="Add context, research, or things worth remembering…"
               />
             </SheetSection>
+            <button className="archive-action company-archive-action" onClick={()=>void onUpdate(company._id,{archived:!company.archived})}><Archive size={13}/>{company.archived?"Restore company":"Archive company"}</button>
           </div>
         </Dialog.Content>
       </Dialog.Portal>
