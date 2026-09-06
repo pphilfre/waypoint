@@ -1,2 +1,5 @@
 allowBuilds:
   esbuild: false
+
+patchedDependencies:
+  nitro@3.0.1-alpha.0: patches/nitro@3.0.1-alpha.0.patch

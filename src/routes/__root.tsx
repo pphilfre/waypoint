@@ -6,13 +6,14 @@ import {
   type ErrorComponentProps,
 } from "@tanstack/react-router";
 import { RefreshCw, TriangleAlert } from "lucide-react";
-import { AuthKitProvider } from "@workos-inc/authkit-react";
-import { ConvexProvider } from "convex/react";
+import { AuthKitProvider, useAuth } from "@workos-inc/authkit-react";
+import { ConvexProviderWithAuthKit } from "@convex-dev/workos";
 import { AppShell } from "@/components/layout/AppShell";
 import { THEME_INIT_SCRIPT, ThemeProvider } from "@/context/theme-context";
 import { convex } from "@/lib/convex";
 import { Button } from "@/components/ui/button";
 import appCss from "../styles.css?url";
+import workspaceCss from "../workspace.css?url";
 
 export const Route = createRootRoute({
   head: () => ({
@@ -27,6 +28,7 @@ export const Route = createRootRoute({
     ],
     links: [
       { rel: "stylesheet", href: appCss },
+      { rel: "stylesheet", href: workspaceCss },
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       {
@@ -36,7 +38,7 @@ export const Route = createRootRoute({
       },
       {
         rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;650;700&family=IBM+Plex+Mono:wght@500&display=swap",
+        href: "https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap",
       },
     ],
   }),
@@ -76,18 +78,17 @@ function RootDocument({ children }: { children: ReactNode }) {
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body>
-        <ConvexProvider client={convex}>
-          <AuthKitProvider
-            clientId={import.meta.env.VITE_WORKOS_CLIENT_ID ?? ""}
-            devMode
-            redirectUri={
-              import.meta.env.VITE_WORKOS_REDIRECT_URI ??
-              "http://localhost:3000/callback"
-            }
-          >
+        <AuthKitProvider
+          clientId={import.meta.env.VITE_WORKOS_CLIENT_ID ?? ""}
+          redirectUri={
+            import.meta.env.VITE_WORKOS_REDIRECT_URI ??
+            "http://localhost:3000/callback"
+          }
+        >
+          <ConvexProviderWithAuthKit client={convex} useAuth={useAuth}>
             <ThemeProvider>{children}</ThemeProvider>
-          </AuthKitProvider>
-        </ConvexProvider>
+          </ConvexProviderWithAuthKit>
+        </AuthKitProvider>
         <Scripts />
       </body>
     </html>

@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { internalMutation, mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
+import { requireUserId } from "./auth";
 
 const entityType = v.union(
   v.literal("company"),
@@ -21,6 +22,7 @@ const RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 export const list = query({
   args: { workosUserId: v.string() },
   handler: async (ctx, args) => {
+    await requireUserId(ctx, args.workosUserId);
     const [companies, opportunities, applications, contacts] = await Promise.all([
       ctx.db.query("companies").withIndex("by_user_trashed", (q) => q.eq("workosUserId", args.workosUserId).eq("trashed", true)).collect(),
       ctx.db.query("opportunities").withIndex("by_user_trashed", (q) => q.eq("workosUserId", args.workosUserId).eq("trashed", true)).collect(),
@@ -46,6 +48,7 @@ export const list = query({
 export const restore = mutation({
   args: { workosUserId: v.string(), entityType, id: v.string() },
   handler: async (ctx, args) => {
+    await requireUserId(ctx, args.workosUserId);
     const table = TABLES[args.entityType];
     const id = ctx.db.normalizeId(table, args.id);
     if (!id) throw new Error("Trash item not found");
@@ -107,12 +110,13 @@ async function removeRecord(ctx: any, workosUserId: string, type: keyof typeof T
 
 export const permanentlyRemove = mutation({
   args: { workosUserId: v.string(), entityType, id: v.string() },
-  handler: (ctx, args) => removeRecord(ctx, args.workosUserId, args.entityType, args.id),
+  handler: async (ctx, args) => { await requireUserId(ctx, args.workosUserId); return removeRecord(ctx, args.workosUserId, args.entityType, args.id); },
 });
 
 export const empty = mutation({
   args: { workosUserId: v.string() },
   handler: async (ctx, args) => {
+    await requireUserId(ctx, args.workosUserId);
     for (const type of Object.keys(TABLES) as Array<keyof typeof TABLES>) {
       const table = TABLES[type];
       const rows = await ctx.db.query(table).withIndex("by_user_trashed", (q: any) => q.eq("workosUserId", args.workosUserId).eq("trashed", true)).collect();

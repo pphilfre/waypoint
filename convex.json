@@ -1,3 +1,17 @@
 {
-  "functions": "convex/"
+  "$schema": "./node_modules/convex/schemas/convex.schema.json",
+  "functions": "convex/",
+  "authKit": {
+    "dev": {
+      "configure": {
+        "redirectUris": ["http://localhost:3000/callback"],
+        "appHomepageUrl": "http://localhost:3000",
+        "corsOrigins": ["http://localhost:3000"]
+      },
+      "localEnvVars": {
+        "VITE_WORKOS_CLIENT_ID": "${authEnv.WORKOS_CLIENT_ID}",
+        "VITE_WORKOS_REDIRECT_URI": "http://localhost:3000/callback"
+      }
+    }
+  }
 }

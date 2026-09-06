@@ -1,47 +1,24 @@
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
+import { requireUserId } from "./auth";
 
 const location = v.object({ city: v.string(), country: v.string(), mode: v.optional(v.union(v.literal("On-site"), v.literal("Hybrid"), v.literal("Remote"))) });
 const link = v.object({ name: v.string(), url: v.string(), type: v.optional(v.string()) });
 const deadline = v.object({ name: v.string(), date: v.number(), time: v.optional(v.string()), recurring: v.optional(v.string()), notes: v.optional(v.string()) });
 
-async function owned(ctx: any, id: Id<"opportunities">, user: string) {
-  const record = await ctx.db.get(id);
-  if (!record || record.workosUserId !== user) throw new Error("Opportunity not found");
-  return record;
-}
-async function ownedCompany(ctx: any, id: Id<"companies">, user: string) {
-  const record = await ctx.db.get(id);
-  if (!record || record.workosUserId !== user || record.trashed) throw new Error("Company not found");
-}
+async function owned(ctx: any, id: Id<"opportunities">, user: string) { const record = await ctx.db.get(id); if (!record || record.workosUserId !== user) throw new Error("Opportunity not found"); return record; }
+async function ownedCompany(ctx: any, id: Id<"companies">, user: string) { const record = await ctx.db.get(id); if (!record || record.workosUserId !== user || record.trashed) throw new Error("Company not found"); }
 
-export const list = query({ args: { workosUserId: v.string() }, handler: async (ctx, args) => {
-  const rows = await ctx.db.query("opportunities").withIndex("by_user_trashed", q => q.eq("workosUserId", args.workosUserId).eq("trashed", false)).collect();
-  return Promise.all(rows.map(async opportunity => ({ ...opportunity, company: await ctx.db.get(opportunity.companyId) })));
-}});
+export const list = query({ args: { workosUserId: v.string() }, handler: async (ctx, args) => { await requireUserId(ctx, args.workosUserId); const rows = await ctx.db.query("opportunities").withIndex("by_user_trashed", q => q.eq("workosUserId", args.workosUserId).eq("trashed", false)).collect(); return Promise.all(rows.map(async opportunity => ({ ...opportunity, company: await ctx.db.get(opportunity.companyId) }))); } });
 
-export const create = mutation({ args: { workosUserId: v.string(), companyId: v.id("companies"), name: v.string(), type: v.string(), locations: v.array(location), links: v.array(link), deadlines: v.array(deadline) }, handler: async (ctx, args) => {
-  await ownedCompany(ctx, args.companyId, args.workosUserId);
-  if (!args.name.trim()) throw new Error("Opportunity name is required");
-  return ctx.db.insert("opportunities", { ...args, name: args.name.trim(), status: "Researching", isOpen: true, trashed: false, updatedAt: Date.now() });
-}});
+export const create = mutation({ args: { workosUserId: v.string(), companyId: v.id("companies"), name: v.string(), type: v.string(), locations: v.array(location), links: v.array(link), deadlines: v.array(deadline), status: v.optional(v.string()), notes: v.optional(v.string()), checkAgainAt: v.optional(v.number()) }, handler: async (ctx, args) => { await requireUserId(ctx, args.workosUserId); await ownedCompany(ctx, args.companyId, args.workosUserId); if (!args.name.trim()) throw new Error("Opportunity name is required"); return ctx.db.insert("opportunities", { ...args, name: args.name.trim(), status: args.status ?? "Researching", isOpen: true, archived: false, trashed: false, updatedAt: Date.now() }); } });
 
-export const update = mutation({ args: { workosUserId: v.string(), opportunityId: v.id("opportunities"), companyId: v.optional(v.id("companies")), name: v.optional(v.string()), type: v.optional(v.string()), locations: v.optional(v.array(location)), links: v.optional(v.array(link)), deadlines: v.optional(v.array(deadline)), status: v.optional(v.string()), notes: v.optional(v.string()), overallScore: v.optional(v.number()), isOpen: v.optional(v.boolean()) }, handler: async (ctx, args) => {
-  await owned(ctx, args.opportunityId, args.workosUserId);
-  if (args.companyId) await ownedCompany(ctx, args.companyId, args.workosUserId);
-  if (args.name !== undefined && !args.name.trim()) throw new Error("Opportunity name is required");
-  const { opportunityId, workosUserId, ...values } = args;
-  await ctx.db.patch(opportunityId, { ...values, ...(values.name !== undefined ? { name: values.name.trim() } : {}), updatedAt: Date.now() });
-}});
+export const update = mutation({ args: { workosUserId: v.string(), opportunityId: v.id("opportunities"), companyId: v.optional(v.id("companies")), name: v.optional(v.string()), type: v.optional(v.string()), locations: v.optional(v.array(location)), links: v.optional(v.array(link)), deadlines: v.optional(v.array(deadline)), status: v.optional(v.string()), notes: v.optional(v.string()), overallScore: v.optional(v.number()), isOpen: v.optional(v.boolean()), customFields: v.optional(v.any()), checkAgainAt: v.optional(v.union(v.number(), v.null())), archived: v.optional(v.boolean()) }, handler: async (ctx, args) => { await requireUserId(ctx, args.workosUserId); await owned(ctx, args.opportunityId, args.workosUserId); if (args.companyId) await ownedCompany(ctx, args.companyId, args.workosUserId); if (args.name !== undefined && !args.name.trim()) throw new Error("Opportunity name is required"); if (args.customFields !== undefined && (!args.customFields || typeof args.customFields !== "object" || Array.isArray(args.customFields))) throw new Error("Custom fields must be an object"); const { opportunityId, workosUserId, checkAgainAt, ...values } = args; await ctx.db.patch(opportunityId, { ...values, ...(values.name !== undefined ? { name: values.name.trim() } : {}), ...(checkAgainAt !== undefined ? { checkAgainAt: checkAgainAt ?? undefined } : {}), updatedAt: Date.now() }); } });
 
-export const remove = mutation({ args: { workosUserId: v.string(), opportunityId: v.id("opportunities") }, handler: async (ctx, args) => {
-  await owned(ctx, args.opportunityId, args.workosUserId);
-  await ctx.db.patch(args.opportunityId, { trashed: true, updatedAt: Date.now() });
-}});
+export const remove = mutation({ args: { workosUserId: v.string(), opportunityId: v.id("opportunities") }, handler: async (ctx, args) => { await requireUserId(ctx, args.workosUserId); await owned(ctx, args.opportunityId, args.workosUserId); await ctx.db.patch(args.opportunityId, { trashed: true, updatedAt: Date.now() }); } });
 
-export const listTypes = query({ args: { workosUserId: v.string() }, handler: (ctx, args) => ctx.db.query("opportunityTypes").withIndex("by_user", q => q.eq("workosUserId", args.workosUserId)).collect() });
-export const createType = mutation({ args: { workosUserId: v.string(), name: v.string(), icon: v.string(), color: v.string() }, handler: async (ctx, args) => {
-  const existing = await ctx.db.query("opportunityTypes").withIndex("by_user", q => q.eq("workosUserId", args.workosUserId)).collect();
-  return ctx.db.insert("opportunityTypes", { ...args, name: args.name.trim(), order: existing.length });
-}});
+export const listTypes = query({ args: { workosUserId: v.string() }, handler: async (ctx, args) => { await requireUserId(ctx, args.workosUserId); return ctx.db.query("opportunityTypes").withIndex("by_user", q => q.eq("workosUserId", args.workosUserId)).collect(); } });
+export const createType = mutation({ args: { workosUserId: v.string(), name: v.string(), icon: v.string(), color: v.string() }, handler: async (ctx, args) => { await requireUserId(ctx, args.workosUserId); const existing = await ctx.db.query("opportunityTypes").withIndex("by_user", q => q.eq("workosUserId", args.workosUserId)).collect(); const name = args.name.trim(); if (!name) throw new Error("Type name is required"); if (existing.some(item => item.name.toLowerCase() === name.toLowerCase())) throw new Error("A type with that name already exists"); return ctx.db.insert("opportunityTypes", { ...args, name, order: existing.length }); } });
+export const updateType = mutation({ args: { workosUserId: v.string(), typeId: v.id("opportunityTypes"), name: v.optional(v.string()), icon: v.optional(v.string()), color: v.optional(v.string()), order: v.optional(v.number()) }, handler: async (ctx, args) => { await requireUserId(ctx, args.workosUserId); const row = await ctx.db.get(args.typeId); if (!row || row.workosUserId !== args.workosUserId) throw new Error("Type not found"); const { typeId, workosUserId, ...patch } = args; await ctx.db.patch(typeId, { ...patch, ...(patch.name ? { name: patch.name.trim() } : {}) }); } });
+export const removeType = mutation({ args: { workosUserId: v.string(), typeId: v.id("opportunityTypes") }, handler: async (ctx, args) => { await requireUserId(ctx, args.workosUserId); const row = await ctx.db.get(args.typeId); if (!row || row.workosUserId !== args.workosUserId) throw new Error("Type not found"); const inUse = await ctx.db.query("opportunities").withIndex("by_user_trashed", q => q.eq("workosUserId", args.workosUserId).eq("trashed", false)).collect(); if (inUse.some(item => item.type === row.name)) throw new Error("Change opportunities using this type before deleting it"); await ctx.db.delete(args.typeId); } });

@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useAuth } from "@workos-inc/authkit-react";
-import { useMutation } from "convex/react";
+import { useConvexAuth, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 
 /**
@@ -8,10 +8,11 @@ import { api } from "../../../convex/_generated/api";
  */
 export function UserSync() {
   const { user } = useAuth();
+  const { isAuthenticated } = useConvexAuth();
   const upsertUser = useMutation(api.users.upsertUser);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !isAuthenticated) return;
 
     const name =
       [user.firstName, user.lastName].filter(Boolean).join(" ") || undefined;
@@ -24,7 +25,7 @@ export function UserSync() {
     }).catch((error: unknown) => {
       console.error("Failed to sync user to Convex", error);
     });
-  }, [user, upsertUser]);
+  }, [isAuthenticated, user, upsertUser]);
 
   return null;
 }

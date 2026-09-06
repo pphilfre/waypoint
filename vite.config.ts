@@ -6,6 +6,8 @@ import tailwindcss from "@tailwindcss/vite";
 import { nitro } from "nitro/vite";
 
 const config = defineConfig({
+  // The authenticated shell is deliberately shared; feature pages are route-split.
+  build: { chunkSizeWarningLimit: 600 },
   plugins: [
     // this is the plugin that enables path aliases
     viteTsConfigPaths({

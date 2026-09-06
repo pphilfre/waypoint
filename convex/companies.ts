@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { internalMutation, mutation, query } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { hostnameFromUrl, normalizeWebsiteUrl } from "./url";
+import { requireUserId } from "./auth";
 
 async function requireOwnedCompany(
   ctx: { db: { get: (id: Id<"companies">) => Promise<any> } },
@@ -32,6 +33,7 @@ async function withLogoUrl<
 export const list = query({
   args: { workosUserId: v.string() },
   handler: async (ctx, args) => {
+    await requireUserId(ctx, args.workosUserId);
     const companies = await ctx.db
       .query("companies")
       .withIndex("by_user_trashed", (q) =>
@@ -51,6 +53,7 @@ export const get = query({
     companyId: v.id("companies"),
   },
   handler: async (ctx, args) => {
+    await requireUserId(ctx, args.workosUserId);
     const company = await ctx.db.get(args.companyId);
     if (!company || company.workosUserId !== args.workosUserId) {
       return null;
@@ -66,6 +69,7 @@ export const create = mutation({
     websiteUrl: v.string(),
   },
   handler: async (ctx, args) => {
+    await requireUserId(ctx, args.workosUserId);
     const name = args.name.trim();
     if (!name) throw new Error("Company name is required");
     const websiteUrl = normalizeWebsiteUrl(args.websiteUrl);
@@ -90,8 +94,10 @@ export const update = mutation({
     notes: v.optional(v.string()),
     overallScore: v.optional(v.union(v.number(), v.null())),
     customFields: v.optional(v.any()),
+    archived: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    await requireUserId(ctx, args.workosUserId);
     const company = await requireOwnedCompany(
       ctx,
       args.companyId,
@@ -125,6 +131,7 @@ export const update = mutation({
       }
       patch.customFields = args.customFields;
     }
+    if (args.archived !== undefined) patch.archived = args.archived;
 
     await ctx.db.patch(args.companyId, patch);
     return { websiteChanged: args.websiteUrl !== undefined };
@@ -137,6 +144,7 @@ export const trash = mutation({
     companyIds: v.array(v.id("companies")),
   },
   handler: async (ctx, args) => {
+    await requireUserId(ctx, args.workosUserId);
     const now = Date.now();
     for (const companyId of args.companyIds) {
       await requireOwnedCompany(ctx, companyId, args.workosUserId);
@@ -158,6 +166,7 @@ export const trash = mutation({
 export const generateUploadUrl = mutation({
   args: { workosUserId: v.string() },
   handler: async (ctx, args) => {
+    await requireUserId(ctx, args.workosUserId);
     const user = await ctx.db
       .query("users")
       .withIndex("by_workos_id", (q) =>
@@ -176,6 +185,7 @@ export const renameCustomField = mutation({
     nextName: v.string(),
   },
   handler: async (ctx, args) => {
+    await requireUserId(ctx, args.workosUserId);
     const currentName = args.currentName.trim();
     const nextName = args.nextName.trim();
     if (!currentName || !nextName) throw new Error("Column name is required");
@@ -203,6 +213,7 @@ export const setLogo = mutation({
     storageId: v.id("_storage"),
   },
   handler: async (ctx, args) => {
+    await requireUserId(ctx, args.workosUserId);
     await requireOwnedCompany(ctx, args.companyId, args.workosUserId);
     await ctx.db.patch(args.companyId, {
       logoStorageId: args.storageId,
@@ -217,6 +228,7 @@ export const clearLogo = mutation({
     companyId: v.id("companies"),
   },
   handler: async (ctx, args) => {
+    await requireUserId(ctx, args.workosUserId);
     await requireOwnedCompany(ctx, args.companyId, args.workosUserId);
     await ctx.db.patch(args.companyId, {
       logoStorageId: undefined,
@@ -245,6 +257,26 @@ export const attachFavicon = internalMutation({
       faviconStorageId: args.storageId,
       updatedAt: Date.now(),
     });
+  },
+});
+
+export const merge = mutation({
+  args: { workosUserId: v.string(), sourceCompanyId: v.id("companies"), targetCompanyId: v.id("companies") },
+  handler: async (ctx, args) => {
+    await requireUserId(ctx, args.workosUserId);
+    if (args.sourceCompanyId === args.targetCompanyId) throw new Error("Choose two different companies");
+    const source = await requireOwnedCompany(ctx, args.sourceCompanyId, args.workosUserId);
+    const target = await requireOwnedCompany(ctx, args.targetCompanyId, args.workosUserId);
+    const [opportunities, applications, contacts] = await Promise.all([
+      ctx.db.query("opportunities").withIndex("by_company", q => q.eq("companyId", source._id)).collect(),
+      ctx.db.query("applications").withIndex("by_company", q => q.eq("companyId", source._id)).collect(),
+      ctx.db.query("contacts").withIndex("by_company", q => q.eq("companyId", source._id)).collect(),
+    ]);
+    for (const row of opportunities) await ctx.db.patch(row._id, { companyId: target._id, updatedAt: Date.now() });
+    for (const row of applications) await ctx.db.patch(row._id, { companyId: target._id, opportunityId: row.opportunityId && opportunities.some(item => item._id === row.opportunityId) ? row.opportunityId : undefined, updatedAt: Date.now() });
+    for (const row of contacts) await ctx.db.patch(row._id, { companyId: target._id, updatedAt: Date.now() });
+    await ctx.db.patch(target._id, { notes: [target.notes, source.notes].filter(Boolean).join("\n\n"), customFields: { ...(source.customFields ?? {}), ...(target.customFields ?? {}) }, updatedAt: Date.now() });
+    await ctx.db.patch(source._id, { trashed: true, updatedAt: Date.now() });
   },
 });
 
