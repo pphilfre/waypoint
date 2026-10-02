@@ -1,0 +1,54 @@
+name: iOS validation
+on:
+  workflow_dispatch:
+  push:
+    paths: ["apps/ios/**", ".github/workflows/ios-*.yml", "convex/**"]
+  pull_request:
+    paths: ["apps/ios/**", ".github/workflows/ios-*.yml", "convex/**"]
+permissions:
+  contents: read
+concurrency:
+  group: ios-validation-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build-test:
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select Xcode and generate project
+        run: bash apps/ios/scripts/setup-ci.sh
+      - name: Resolve pinned dependencies
+        run: xcodebuild -resolvePackageDependencies -project apps/ios/Waypoint.xcodeproj -scheme Waypoint -clonedSourcePackagesDirPath apps/ios/build/SourcePackages
+      - name: Choose available iPhone simulator
+        run: |
+          xcrun simctl list devices available --json > "$RUNNER_TEMP/devices.json"
+          python3 - <<'PY'
+          import json, os
+          with open(os.environ['RUNNER_TEMP'] + '/devices.json') as file:
+              runtimes = json.load(file)['devices']
+          devices = [d for runtime, rows in runtimes.items() if 'iOS-26-0' in runtime for d in rows if d['name'].startswith('iPhone') and d['isAvailable']]
+          if not devices:
+              raise SystemExit('Xcode 26.0 iPhone simulator missing from runner')
+          with open(os.environ['GITHUB_ENV'], 'a') as file:
+              file.write('SIMULATOR_ID=' + devices[0]['udid'] + '\n')
+          PY
+      - name: Build and test native application
+        run: |
+          set -o pipefail
+          xcodebuild test -project apps/ios/Waypoint.xcodeproj -scheme Waypoint \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
+            -derivedDataPath apps/ios/build/DerivedData \
+            -clonedSourcePackagesDirPath apps/ios/build/SourcePackages \
+            -resultBundlePath apps/ios/build/Validation.xcresult \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee apps/ios/build/validation.log
+      - name: Upload compiler log and test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-validation-${{ github.run_number }}
+          path: |
+            apps/ios/build/validation.log
+            apps/ios/build/Validation.xcresult
+          if-no-files-found: warn
+          retention-days: 14
