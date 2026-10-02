@@ -3,16 +3,8 @@ name: Build iOS IPA
 on:
   workflow_dispatch:
 
-  push:
-    branches:
-      - main
-    paths:
-      - "apps/ios/**"
-      - ".github/workflows/ios-ipa.yml"
-      - "convex/**"
-
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: ios-ipa-${{ github.ref }}
@@ -20,7 +12,7 @@ concurrency:
 
 jobs:
   build-ipa:
-    name: Build unsigned IPA
+    name: Build IPA and create release
     runs-on: macos-26
     timeout-minutes: 45
 
@@ -85,7 +77,9 @@ jobs:
 
           if [[ -z "$APP_PATH" ]]; then
             echo "Could not find built .app"
-            find apps/ios/build/DerivedData/Build/Products -maxdepth 3 -print || true
+            find apps/ios/build/DerivedData/Build/Products \
+              -maxdepth 3 \
+              -print || true
             exit 1
           fi
 
@@ -111,20 +105,40 @@ jobs:
           zip \
             -r \
             -y \
-            "$GITHUB_WORKSPACE/apps/ios/build/Waypoint-unsigned.ipa" \
+            "$GITHUB_WORKSPACE/apps/ios/build/Waypoint.ipa" \
             Payload
 
           echo ""
           echo "Created IPA:"
-          ls -lh "$GITHUB_WORKSPACE/apps/ios/build/Waypoint-unsigned.ipa"
+          ls -lh "$GITHUB_WORKSPACE/apps/ios/build/Waypoint.ipa"
 
-      - name: Upload unsigned IPA
+      - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Waypoint-unsigned-${{ github.run_number }}
-          path: apps/ios/build/Waypoint-unsigned.ipa
+          name: Waypoint-IPA-${{ github.run_number }}
+          path: apps/ios/build/Waypoint.ipa
           if-no-files-found: error
           retention-days: 14
+
+      - name: Create release version
+        shell: bash
+        run: |
+          VERSION="v0.0.${{ github.run_number }}"
+
+          echo "RELEASE_VERSION=$VERSION" >> "$GITHUB_ENV"
+
+          echo "Release version: $VERSION"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh release create "$RELEASE_VERSION" \
+            "apps/ios/build/Waypoint.ipa" \
+            --target "${{ github.sha }}" \
+            --title "Waypoint $RELEASE_VERSION" \
+            --generate-notes
 
       - name: Upload build log
         if: always()
