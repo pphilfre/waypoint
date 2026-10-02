@@ -4,5 +4,9 @@ import tsconfigPaths from "vite-tsconfig-paths";
 
 export default defineConfig({
   plugins: [tsconfigPaths(), react()],
-  test: { environment: "jsdom", include: ["src/**/*.test.ts", "convex/**/*.test.ts"] },
+  test: {
+    environment: "jsdom",
+    setupFiles: ["src/test-setup.ts"],
+    include: ["src/**/*.test.ts", "convex/**/*.test.ts"],
+  },
 });

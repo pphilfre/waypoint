@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useAuth } from "@workos-inc/authkit-react";
+import { useAuth } from "@/lib/auth";
 import { useConvexAuth, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 

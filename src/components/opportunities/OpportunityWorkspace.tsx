@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useSubmission } from "@/hooks/use-submission";
 import * as Dialog from "@radix-ui/react-dialog";
-import { useAuth } from "@workos-inc/authkit-react";
+import { useAuth } from "@/lib/auth";
 import { useMutation, useQuery } from "convex/react";
 import { Archive, Bookmark, BriefcaseBusiness, Building2, CalendarDays, Check, ChevronRight, Columns3, Download, ExternalLink, FlaskConical, GraduationCap, Lightbulb, Link2, MapPin, Plus, Search, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";

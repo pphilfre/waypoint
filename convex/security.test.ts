@@ -3,6 +3,11 @@ import { requireUserId } from "./auth";
 import { assertPublicHostname } from "./url";
 
 describe("security boundaries", () => {
+  it("rejects unauthenticated requests even with a claimed user id", async () => {
+    const ctx = { auth: { getUserIdentity: async () => null } };
+    await expect(requireUserId(ctx, "user-a")).rejects.toThrow("Not authenticated");
+  });
+
   it("rejects a spoofed user id", async () => {
     const ctx = { auth: { getUserIdentity: async () => ({ subject: "user-a" }) } };
     await expect(requireUserId(ctx, "user-b")).rejects.toThrow("Not authorized");
