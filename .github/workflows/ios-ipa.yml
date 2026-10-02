@@ -1,0 +1,136 @@
+name: Build iOS IPA
+
+on:
+  workflow_dispatch:
+
+  push:
+    branches:
+      - main
+    paths:
+      - "apps/ios/**"
+      - ".github/workflows/ios-ipa.yml"
+      - "convex/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-ipa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-ipa:
+    name: Build unsigned IPA
+    runs-on: macos-26
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Xcode and generate project
+        run: bash apps/ios/scripts/setup-ci.sh
+
+      - name: Show Xcode environment
+        run: |
+          echo "Selected Xcode:"
+          xcodebuild -version
+
+          echo ""
+          echo "Available SDKs:"
+          xcodebuild -showsdks
+
+      - name: Resolve Swift package dependencies
+        run: |
+          xcodebuild \
+            -resolvePackageDependencies \
+            -project apps/ios/Waypoint.xcodeproj \
+            -scheme Waypoint \
+            -clonedSourcePackagesDirPath apps/ios/build/SourcePackages
+
+      - name: Build iOS application
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -o pipefail
+
+          mkdir -p apps/ios/build
+
+          xcodebuild build \
+            -project apps/ios/Waypoint.xcodeproj \
+            -scheme Waypoint \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination "generic/platform=iOS" \
+            -derivedDataPath apps/ios/build/DerivedData \
+            -clonedSourcePackagesDirPath apps/ios/build/SourcePackages \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            2>&1 | tee apps/ios/build/ipa-build.log
+
+      - name: Locate built application
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          APP_PATH="$(
+            find apps/ios/build/DerivedData/Build/Products/Release-iphoneos \
+              -maxdepth 1 \
+              -type d \
+              -name "*.app" \
+              -print \
+              -quit
+          )"
+
+          if [[ -z "$APP_PATH" ]]; then
+            echo "Could not find built .app"
+            find apps/ios/build/DerivedData/Build/Products -maxdepth 3 -print || true
+            exit 1
+          fi
+
+          echo "Found application:"
+          echo "$APP_PATH"
+
+          echo "APP_PATH=$APP_PATH" >> "$GITHUB_ENV"
+
+      - name: Create unsigned IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          IPA_DIR="$RUNNER_TEMP/waypoint-ipa"
+
+          rm -rf "$IPA_DIR"
+          mkdir -p "$IPA_DIR/Payload"
+
+          cp -R "$APP_PATH" "$IPA_DIR/Payload/"
+
+          cd "$IPA_DIR"
+
+          zip \
+            -r \
+            -y \
+            "$GITHUB_WORKSPACE/apps/ios/build/Waypoint-unsigned.ipa" \
+            Payload
+
+          echo ""
+          echo "Created IPA:"
+          ls -lh "$GITHUB_WORKSPACE/apps/ios/build/Waypoint-unsigned.ipa"
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Waypoint-unsigned-${{ github.run_number }}
+          path: apps/ios/build/Waypoint-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Waypoint-build-log-${{ github.run_number }}
+          path: apps/ios/build/ipa-build.log
+          if-no-files-found: warn
+          retention-days: 14
