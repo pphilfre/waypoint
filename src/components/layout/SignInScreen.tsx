@@ -1,9 +1,13 @@
-import { useAuth } from "@workos-inc/authkit-react";
+import { useAuth } from "@/lib/auth";
 import { ArrowRight, LockKeyhole, Route, TableProperties } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useRouterState } from "@tanstack/react-router";
 
 export function SignInScreen() {
   const { signIn, signUp } = useAuth();
+  const authError = useRouterState({
+    select: (state) => new URLSearchParams(state.location.searchStr).has("authError"),
+  });
 
   return (
     <main className="signin-page">
@@ -25,6 +29,7 @@ export function SignInScreen() {
           <p className="signin-kicker">Welcome back</p>
           <h2>Your next move starts here.</h2>
           <p className="signin-description">Sign in to open your private careers workspace.</p>
+          {authError && <p role="alert">Sign-in did not complete. Please try again.</p>}
           <div className="signin-buttons">
             <Button className="w-full" size="lg" onClick={() => void signIn()}>
               Continue to Waypoint <ArrowRight size={15} />

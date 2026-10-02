@@ -1,5 +1,5 @@
 import * as Dialog from "@radix-ui/react-dialog";
-import { useAuth } from "@workos-inc/authkit-react";
+import { useAuth } from "@/lib/auth";
 import { useMutation, useQuery } from "convex/react";
 import { Braces, Check, Download, FileJson, FileSpreadsheet, Info, Upload, X } from "lucide-react";
 import { useMemo, useRef, useState } from "react";

@@ -1,6 +1,7 @@
 import { createFileRoute, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState, type ReactNode } from "react";
-import { useAuth } from "@workos-inc/authkit-react";
+import { useAuth } from "@/lib/auth";
+import { useAccessToken } from "@workos/authkit-tanstack-react-start/client";
 import { UserProfile, UserSecurity, UserSessions, WorkOsWidgets } from "@workos-inc/widgets";
 import { useMutation, useQuery } from "convex/react";
 import { ArrowDown, ArrowUp, Check, Database, Palette, Pencil, Plus, Scale, Shapes, Trash2, UserRound, Workflow } from "lucide-react";
@@ -33,7 +34,8 @@ const COLOR_SCHEMES: { value: ColorScheme; label: string; primary: string }[] = 
 
 function SettingsPage() {
   const { mode, colorScheme, setMode, setColorScheme } = useTheme();
-  const { user, getAccessToken } = useAuth();
+  const { user } = useAuth();
+  const { getAccessToken } = useAccessToken();
   const [section, setSection] = useState<SettingsSection>("appearance");
 
   const search = useRouterState({select:s=>s.location.searchStr});
@@ -48,7 +50,11 @@ function SettingsPage() {
         {section === "ratings" && <RatingConfiguration workosUserId={user?.id}/>}
         {section === "data" && <DataExchange/>}
         {section === "trash" && <TrashView workosUserId={user?.id}/>}
-        {section === "account" && <AccountSettings getAccessToken={getAccessToken}/>}
+        {section === "account" && <AccountSettings getAccessToken={async () => {
+          const token = await getAccessToken();
+          if (!token) throw new Error("Sign in to manage your account");
+          return token;
+        }}/>}
       </main>
     </div>
   </div>;

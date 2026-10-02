@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { useAuth } from "@workos-inc/authkit-react";
+import { useAuth } from "@/lib/auth";
 import { useQuery } from "convex/react";
 import { Command } from "cmdk";
 import * as Dialog from "@radix-ui/react-dialog";

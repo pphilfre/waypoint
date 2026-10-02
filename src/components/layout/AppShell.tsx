@@ -1,6 +1,5 @@
-import { useAuth } from "@workos-inc/authkit-react";
+import { useAuth } from "@/lib/auth";
 import { useConvexAuth } from "convex/react";
-import { useRouterState } from "@tanstack/react-router";
 import { Outlet } from "@tanstack/react-router";
 import { RefreshCw, TriangleAlert } from "lucide-react";
 import { Navbar } from "@/components/layout/Navbar";
@@ -11,20 +10,17 @@ import { Button } from "@/components/ui/button";
 export function AppShell() {
   const { user, isLoading, signIn, signOut } = useAuth();
   const { isLoading: isConvexAuthLoading, isAuthenticated } = useConvexAuth();
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const isCallback = pathname === "/callback";
-
-  if ((isLoading || (user && isConvexAuthLoading)) && !isCallback) {
+  if (isLoading || (user && isConvexAuthLoading)) {
     return <ShellSkeleton />;
   }
 
-  if (!user && !isCallback) {
+  if (!user) {
     return <SignInScreen />;
   }
 
   // AuthKit can resolve the user before its JWT has reached Convex. Keep
   // authenticated routes unmounted until Convex can authorize their queries.
-  if (user && !isAuthenticated && !isCallback) {
+  if (!isAuthenticated) {
     return <AuthConnectionError onSignOut={() => void signOut()} />;
   }
 

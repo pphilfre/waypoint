@@ -1,0 +1,69 @@
+name: Waypoint
+options:
+  minimumXcodeGenVersion: 2.46.0
+  deploymentTarget:
+    iOS: "18.0"
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    PRODUCT_BUNDLE_IDENTIFIER: dev.freddiephilpot.waypoint
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: ""
+    WAYPOINT_CONVEX_URL: "https://placeholder.convex.cloud"
+    WAYPOINT_WORKOS_CLIENT_ID: "unconfigured"
+packages:
+  Convex:
+    url: https://github.com/get-convex/convex-swift
+    exactVersion: 0.8.1
+  WorkOS:
+    url: https://github.com/workos/workos-ios
+    exactVersion: 0.7.0
+targets:
+  Waypoint:
+    type: application
+    platform: iOS
+    sources: [Sources]
+    resources: [Resources]
+    dependencies:
+      - package: Convex
+        product: ConvexMobile
+      - package: WorkOS
+        product: WorkOS
+    settings:
+      base:
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    info:
+      path: Generated/Info.plist
+      properties:
+        CFBundleDisplayName: Waypoint
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        CFBundleURLTypes:
+          - CFBundleURLName: dev.freddiephilpot.waypoint.auth
+            CFBundleURLSchemes: [waypoint]
+        WaypointConvexURL: $(WAYPOINT_CONVEX_URL)
+        WaypointWorkOSClientID: $(WAYPOINT_WORKOS_CLIENT_ID)
+        WaypointRedirectURI: waypoint://callback
+  WaypointTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [Tests]
+    dependencies:
+      - target: Waypoint
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  Waypoint:
+    build:
+      targets:
+        Waypoint: all
+        WaypointTests: [test]
+    test:
+      targets: [WaypointTests]
+      gatherCoverageData: true

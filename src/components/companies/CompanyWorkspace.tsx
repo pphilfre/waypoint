@@ -1,6 +1,6 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { Link } from "@tanstack/react-router";
-import { useAuth } from "@workos-inc/authkit-react";
+import { useAuth } from "@/lib/auth";
 import {
   getFilteredRowModel,
   getSortedRowModel,

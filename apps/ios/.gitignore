@@ -1,0 +1,5 @@
+Generated/
+Waypoint.xcodeproj/
+build/
+*.xcresult
+.DS_Store

@@ -1,0 +1,120 @@
+name: iOS validation
+
+on:
+  workflow_dispatch:
+
+  push:
+    paths:
+      - "apps/ios/**"
+      - ".github/workflows/ios-*.yml"
+      - "convex/**"
+
+  pull_request:
+    paths:
+      - "apps/ios/**"
+      - ".github/workflows/ios-*.yml"
+      - "convex/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: Build and test iOS
+    runs-on: macos-26
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Xcode and generate project
+        run: bash apps/ios/scripts/setup-ci.sh
+
+      - name: Show Xcode environment
+        run: |
+          echo "Selected Xcode:"
+          xcodebuild -version
+
+          echo ""
+          echo "Available SDKs:"
+          xcodebuild -showsdks
+
+          echo ""
+          echo "Available simulator runtimes:"
+          xcrun simctl list runtimes
+
+          echo ""
+          echo "Available simulator devices:"
+          xcrun simctl list devices available
+
+      - name: Resolve Swift package dependencies
+        run: |
+          xcodebuild \
+            -resolvePackageDependencies \
+            -project apps/ios/Waypoint.xcodeproj \
+            -scheme Waypoint \
+            -clonedSourcePackagesDirPath apps/ios/build/SourcePackages
+
+      - name: Find compatible iPhone simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          DESTINATIONS="$(
+            xcodebuild \
+              -project apps/ios/Waypoint.xcodeproj \
+              -scheme Waypoint \
+              -showdestinations
+          )"
+
+          echo "$DESTINATIONS"
+
+          SIMULATOR_ID="$(
+            echo "$DESTINATIONS" |
+            sed -n \
+              's/.*{ platform:iOS Simulator, arch:[^,]*, id:\([^,]*\), OS:[^,]*, name:iPhone[^}]* }.*/\1/p' |
+            head -n 1 |
+            xargs
+          )"
+
+          if [[ -z "$SIMULATOR_ID" ]]; then
+            echo "No compatible iPhone simulator was reported by Xcode."
+            exit 1
+          fi
+
+          echo "Selected simulator: $SIMULATOR_ID"
+          echo "SIMULATOR_ID=$SIMULATOR_ID" >> "$GITHUB_ENV"
+
+      - name: Build and test native application
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -o pipefail
+
+          mkdir -p apps/ios/build
+
+          xcodebuild test \
+            -project apps/ios/Waypoint.xcodeproj \
+            -scheme Waypoint \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
+            -derivedDataPath apps/ios/build/DerivedData \
+            -clonedSourcePackagesDirPath apps/ios/build/SourcePackages \
+            -resultBundlePath apps/ios/build/Validation.xcresult \
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee apps/ios/build/validation.log
+
+      - name: Upload compiler log and test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-validation-${{ github.run_number }}
+          path: |
+            apps/ios/build/validation.log
+            apps/ios/build/Validation.xcresult
+          if-no-files-found: warn
+          retention-days: 14

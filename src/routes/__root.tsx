@@ -6,8 +6,10 @@ import {
   type ErrorComponentProps,
 } from "@tanstack/react-router";
 import { RefreshCw, TriangleAlert } from "lucide-react";
-import { AuthKitProvider, useAuth } from "@workos-inc/authkit-react";
-import { ConvexProviderWithAuthKit } from "@convex-dev/workos";
+import { AuthKitProvider } from "@workos/authkit-tanstack-react-start/client";
+import { ConvexProviderWithAuth } from "convex/react";
+import { useConvexAuthKit } from "@/lib/use-convex-auth";
+import { SessionSync } from "@/lib/auth";
 import { AppShell } from "@/components/layout/AppShell";
 import { THEME_INIT_SCRIPT, ThemeProvider } from "@/context/theme-context";
 import { convex } from "@/lib/convex";
@@ -48,7 +50,8 @@ export const Route = createRootRoute({
 });
 
 function RootErrorComponent({ error, reset }: ErrorComponentProps) {
-  const isMissingConvexFunction = error.message.includes("Could not find public function");
+  const message = error instanceof Error ? error.message : "Unknown error";
+  const isMissingConvexFunction = message.includes("Could not find public function");
   return (
     <main className="root-error-page">
       <section className="root-error-card">
@@ -64,7 +67,7 @@ function RootErrorComponent({ error, reset }: ErrorComponentProps) {
           <Button onClick={reset}><RefreshCw size={14} /> Try again</Button>
           <Button variant="outline" onClick={() => window.location.reload()}>Reload app</Button>
         </div>
-        {import.meta.env.DEV && <details><summary>Developer details</summary><pre>{error.message}</pre></details>}
+        {import.meta.env.DEV && <details><summary>Developer details</summary><pre>{message}</pre></details>}
       </section>
     </main>
   );
@@ -78,16 +81,11 @@ function RootDocument({ children }: { children: ReactNode }) {
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body>
-        <AuthKitProvider
-          clientId={import.meta.env.VITE_WORKOS_CLIENT_ID ?? ""}
-          redirectUri={
-            import.meta.env.VITE_WORKOS_REDIRECT_URI ??
-            "http://localhost:3000/callback"
-          }
-        >
-          <ConvexProviderWithAuthKit client={convex} useAuth={useAuth}>
+        <AuthKitProvider>
+          <SessionSync />
+          <ConvexProviderWithAuth client={convex} useAuth={useConvexAuthKit}>
             <ThemeProvider>{children}</ThemeProvider>
-          </ConvexProviderWithAuthKit>
+          </ConvexProviderWithAuth>
         </AuthKitProvider>
         <Scripts />
       </body>
