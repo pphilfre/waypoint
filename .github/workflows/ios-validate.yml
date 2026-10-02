@@ -2,11 +2,13 @@ name: iOS validation
 
 on:
   workflow_dispatch:
+
   push:
     paths:
       - "apps/ios/**"
       - ".github/workflows/ios-*.yml"
       - "convex/**"
+
   pull_request:
     paths:
       - "apps/ios/**"
@@ -22,16 +24,35 @@ concurrency:
 
 jobs:
   build-test:
+    name: Build and test iOS
     runs-on: macos-26
     timeout-minutes: 45
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Select Xcode and generate project
+      - name: Set up Xcode and generate project
         run: bash apps/ios/scripts/setup-ci.sh
 
-      - name: Resolve pinned dependencies
+      - name: Show Xcode environment
+        run: |
+          echo "Selected Xcode:"
+          xcodebuild -version
+
+          echo ""
+          echo "Available SDKs:"
+          xcodebuild -showsdks
+
+          echo ""
+          echo "Available simulator runtimes:"
+          xcrun simctl list runtimes
+
+          echo ""
+          echo "Available simulator devices:"
+          xcrun simctl list devices available
+
+      - name: Resolve Swift package dependencies
         run: |
           xcodebuild \
             -resolvePackageDependencies \
@@ -39,56 +60,40 @@ jobs:
             -scheme Waypoint \
             -clonedSourcePackagesDirPath apps/ios/build/SourcePackages
 
-      - name: Choose available iPhone simulator
+      - name: Find compatible iPhone simulator
+        shell: bash
         run: |
-          xcrun simctl list devices available --json > "$RUNNER_TEMP/devices.json"
+          set -euo pipefail
 
-          python3 - <<'PY'
-          import json
-          import os
+          DESTINATIONS="$(
+            xcodebuild \
+              -project apps/ios/Waypoint.xcodeproj \
+              -scheme Waypoint \
+              -showdestinations
+          )"
 
-          with open(os.environ["RUNNER_TEMP"] + "/devices.json") as f:
-              runtimes = json.load(f)["devices"]
+          echo "$DESTINATIONS"
 
-          devices = []
+          SIMULATOR_ID="$(
+            echo "$DESTINATIONS" |
+            sed -n \
+              's/.*{ platform:iOS Simulator, arch:[^,]*, id:\([^,]*\), OS:[^,]*, name:iPhone[^}]* }.*/\1/p' |
+            head -n 1 |
+            xargs
+          )"
 
-          for runtime, rows in runtimes.items():
-              if "iOS" not in runtime:
-                  continue
+          if [[ -z "$SIMULATOR_ID" ]]; then
+            echo "No compatible iPhone simulator was reported by Xcode."
+            exit 1
+          fi
 
-              for device in rows:
-                  if (
-                      device.get("isAvailable", False)
-                      and device.get("name", "").startswith("iPhone")
-                  ):
-                      devices.append((runtime, device))
-
-          if not devices:
-              print("Available simulator runtimes:")
-              for runtime, rows in runtimes.items():
-                  print(runtime)
-                  for device in rows:
-                      print(
-                          "  ",
-                          device.get("name"),
-                          device.get("udid"),
-                          "available=" + str(device.get("isAvailable"))
-                      )
-
-              raise SystemExit("No available iPhone simulator found")
-
-          runtime, device = devices[0]
-
-          print(f"Using simulator: {device['name']}")
-          print(f"Runtime: {runtime}")
-          print(f"UDID: {device['udid']}")
-
-          with open(os.environ["GITHUB_ENV"], "a") as f:
-              f.write(f"SIMULATOR_ID={device['udid']}\n")
-          PY
+          echo "Selected simulator: $SIMULATOR_ID"
+          echo "SIMULATOR_ID=$SIMULATOR_ID" >> "$GITHUB_ENV"
 
       - name: Build and test native application
+        shell: bash
         run: |
+          set -euo pipefail
           set -o pipefail
 
           mkdir -p apps/ios/build
